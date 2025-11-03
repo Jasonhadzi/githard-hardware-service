@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  hardware-service:
+    build: .
+    container_name: hardware-microservice
+    ports:
+      - "5002:5002"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
