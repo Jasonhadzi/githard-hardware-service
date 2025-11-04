@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
+from contextlib import asynccontextmanager
+import os
 import hardware_database as hardwareDB
 from config import config
 from models import (
@@ -10,11 +12,51 @@ from models import (
     MessageResponse
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
+    try:
+        # Don't use dependency injection here, create client directly
+        if not config.validate_config():
+            print("⚠ Invalid MongoDB configuration")
+        else:
+            connection_string = config.get_mongodb_connection_string()
+            # MongoDB Atlas (mongodb+srv://) automatically enables TLS
+            # Check if we need to allow invalid certificates (for Docker/development environments)
+            # Default to True for Docker environments to avoid SSL issues
+            allow_invalid_certs_env = os.getenv('MONGO_ALLOW_INVALID_CERTS', 'true').lower()
+            allow_invalid_certs = allow_invalid_certs_env == 'true'
+            
+            print(f"Connecting to MongoDB with tlsAllowInvalidCertificates={allow_invalid_certs}")
+            
+            test_client = MongoClient(
+                connection_string,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=10000,
+                socketTimeoutMS=20000,
+                tlsAllowInvalidCertificates=allow_invalid_certs
+            )
+            test_client.admin.command('ping')
+            test_client.close()
+            print("✓ MongoDB connection successful")
+    except Exception as e:
+        print(f"⚠ Failed to connect to MongoDB: {e}")
+        print("App will start but database features may not work")
+        print(f"MONGO_ALLOW_INVALID_CERTS={os.getenv('MONGO_ALLOW_INVALID_CERTS', 'not set')}")
+        print("Tip: Ensure MONGO_ALLOW_INVALID_CERTS=true is set in your .env file if you're seeing SSL errors")
+    
+    yield
+    
+    # Shutdown (if needed in the future)
+    pass
+
 # Initialize FastAPI application
 app = FastAPI(
     title="Hardware Service API",
     description="Microservice for managing hardware sets, inventory, and checkout/check-in operations",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 def get_mongodb_client():
@@ -24,41 +66,25 @@ def get_mongodb_client():
             raise ValueError("Invalid MongoDB configuration")
         
         connection_string = config.get_mongodb_connection_string()
-        # Only use tlsAllowInvalidCertificates for Atlas connections
-        use_tls = 'mongodb+srv' in connection_string
+        # MongoDB Atlas (mongodb+srv://) automatically enables TLS
+        # Check if we need to allow invalid certificates (for Docker/development environments)
+        # Default to True for Docker environments to avoid SSL issues
+        allow_invalid_certs_env = os.getenv('MONGO_ALLOW_INVALID_CERTS', 'true').lower()
+        allow_invalid_certs = allow_invalid_certs_env == 'true'
+        
         client = MongoClient(
-            connection_string, 
-            tlsAllowInvalidCertificates=use_tls
+            connection_string,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=10000,
+            socketTimeoutMS=20000,
+            tlsAllowInvalidCertificates=allow_invalid_certs,
+            directConnection=False  # Important for mongodb+srv:// connections
         )
         
-        # Test the connection
-        client.admin.command('ping')
         return client
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")
-
-@app.on_event("startup")
-async def startup_event():
-    """Test MongoDB connection on startup"""
-    try:
-        # Don't use dependency injection here, create client directly
-        if not config.validate_config():
-            print("⚠ Invalid MongoDB configuration")
-            return
-        
-        connection_string = config.get_mongodb_connection_string()
-        use_tls = 'mongodb+srv' in connection_string
-        test_client = MongoClient(
-            connection_string,
-            tlsAllowInvalidCertificates=use_tls
-        )
-        test_client.admin.command('ping')
-        test_client.close()
-        print("✓ MongoDB connection successful")
-    except Exception as e:
-        print(f"⚠ Failed to connect to MongoDB: {e}")
-        print("App will start but database features may not work")
 
 @app.get("/")
 async def root():

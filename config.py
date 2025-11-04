@@ -27,15 +27,21 @@ class Config:
         self.environment = self._get_env_var('ENVIRONMENT')
     
     def get_mongodb_connection_string(self) -> str:
-        """Generate MongoDB connection string with database name appended"""
+        """Return MongoDB connection string with TLS parameters if needed"""
         conn_str = self.mongo_host
         
-        # Append database name if not already present
-        if f'/{self.mongo_database}' not in conn_str and '/?' not in conn_str:
+        # Add tlsAllowInvalidCertificates to connection string if needed
+        # This is more reliable than client parameter for mongodb+srv://
+        import os
+        allow_invalid_certs = os.getenv('MONGO_ALLOW_INVALID_CERTS', 'true').lower() == 'true'
+        
+        if allow_invalid_certs and 'mongodb+srv://' in conn_str:
+            # Add tlsAllowInvalidCertificates to query parameters
             if '?' in conn_str:
-                conn_str = conn_str.replace('?', f'/{self.mongo_database}?')
+                if 'tlsAllowInvalidCertificates' not in conn_str:
+                    conn_str += '&tlsAllowInvalidCertificates=true'
             else:
-                conn_str = f"{conn_str}/{self.mongo_database}"
+                conn_str += '?tlsAllowInvalidCertificates=true'
         
         return conn_str
     

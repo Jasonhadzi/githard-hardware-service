@@ -18,3 +18,18 @@ services:
       retries: 3
       start_period: 40s
 
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: hardware-service-ngrok
+    command: http hardware-service:5002
+    ports:
+      - "4040:4040"  # ngrok web interface (http://localhost:4040)
+    env_file:
+      - .env
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
+    depends_on:
+      hardware-service:
+        condition: service_healthy
+    restart: unless-stopped
+

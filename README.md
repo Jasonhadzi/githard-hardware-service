@@ -73,12 +73,31 @@ cp env.template .env
 
 2. Update `.env` with your MongoDB credentials
 
-3. Build and run with Docker Compose:
+3. **Configure ngrok (optional but recommended)**:
+   - Sign up for a free ngrok account at https://dashboard.ngrok.com/signup
+   - Get your authtoken from https://dashboard.ngrok.com/get-started/your-authtoken
+   - Add it to your `.env` file:
+     ```bash
+     NGROK_AUTHTOKEN=your_ngrok_authtoken_here
+     ```
+   - The `ngrok.yml` file will be automatically generated from this environment variable
+
+4. Build and run with Docker Compose:
 ```bash
 docker-compose up --build
 ```
 
-The service will be available at `http://localhost:5002`
+The service will be available at:
+- **Local**: `http://localhost:5002`
+- **Public (via ngrok)**: Check the ngrok web interface at `http://localhost:4040` or container logs:
+  ```bash
+  docker logs hardware-service-ngrok
+  ```
+  Look for a line like: `Forwarding https://abc123.ngrok-free.app -> http://hardware-service:5002`
+
+**Access your public URL**:
+- Visit `http://localhost:4040` for the ngrok web interface (shows requests, public URL, etc.)
+- Or check container logs: `docker logs hardware-service-ngrok | grep "Forwarding"`
 
 ## API Endpoints
 
@@ -247,7 +266,4 @@ This will connect to: `mongodb+srv://user:password@host.net/HardwareService?appN
 - Each service has its own MongoDB database for isolation
 - The service can be scaled independently
 
-## License
-
-[Add your license information here]
 
